@@ -29,6 +29,31 @@ spec:
       hostNetwork: true
       securityContext:
         runAsUser: 0
+      # Init container to ensure container runtime socket is available
+      initContainers:
+      - name: verify-runtime-socket
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Checking for container runtime socket..."
+          if [ -S /host-root/var/run/docker.sock ]; then
+            echo "✓ Docker socket found at /var/run/docker.sock"
+          elif [ -S /host-root/run/docker.sock ]; then
+            echo "✓ Docker socket found at /run/docker.sock"
+          elif [ -S /host-root/run/containerd/containerd.sock ]; then
+            echo "✓ Containerd socket found at /run/containerd/containerd.sock"
+          else
+            echo "⚠ No container runtime socket found!"
+            echo "  This may cause docker-bench-security to fail"
+          fi
+        volumeMounts:
+        - name: host-root
+          mountPath: /host-root
+          readOnly: true
+        securityContext:
+          privileged: true
       containers:
         - name: docker-bench
           image: madhuakula/hacker-container
@@ -64,10 +89,23 @@ spec:
             - name: usr-bin-runc-vol
               mountPath: /usr/bin/runc
               readOnly: true
+            # Try Docker socket first (common path)
             - name: docker-sock-volume
               mountPath: /var/run/docker.sock
               readOnly: true
+            # Fallback Docker socket path
+            - name: docker-sock-fallback
+              mountPath: /run/docker.sock
+              readOnly: true
+            # Containerd socket (for environments using containerd)
+            - name: containerd-sock-volume
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
       volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
         - name: var-lib-vol
           hostPath:
             path: /var/lib
@@ -89,4 +127,12 @@ spec:
         - name: docker-sock-volume
           hostPath:
             path: /var/run/docker.sock
+            type: DirectoryOrCreate
+        - name: docker-sock-fallback
+          hostPath:
+            path: /run/docker.sock
+            type: DirectoryOrCreate
+        - name: containerd-sock-volume
+          hostPath:
+            path: /run/containerd/containerd.sock
             type: DirectoryOrCreate
