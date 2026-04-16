@@ -81,6 +81,9 @@ spec:
           hostPath:
             path: /
             type: Directory
+        # Symlinks to the host systems container management sockets
+        - name: socket-link
+          emptyDir: {}
         # Unified socket volume created by init container
         - name: container-socket-unified
           emptyDir: {}
